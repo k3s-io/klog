@@ -977,6 +977,8 @@ func (l *loggingT) output(s severity, log *logr.Logger, buf *buffer, depth int, 
 		}
 	}
 	if s == fatalLog {
+		l.mu.Unlock()
+		timeoutFlush(10 * time.Second)
 		panic(string(data))
 	}
 	l.putBuffer(buf)
