@@ -18,6 +18,7 @@ package klog
 
 import (
 	"context"
+	"sync"
 
 	"github.com/go-logr/logr"
 )
@@ -37,6 +38,9 @@ var (
 	// klogLogger is used as fallback for logging through the normal klog code
 	// when no Logger is set.
 	klogLogger logr.Logger = logr.New(&klogger{})
+
+	enableContextualOnce sync.Once
+	setLoggerOnce        sync.Once
 )
 
 // SetLogger sets a Logger implementation that will be used as backing
@@ -69,15 +73,19 @@ func SetLogger(logger logr.Logger) {
 // Supporting direct calls is recommended because it avoids the overhead of
 // routing log entries through klogr into klog and then into the actual Logger
 // backend.
+//
+// This can only be called once; subsequent calls are ignored.
 func SetLoggerWithOptions(logger logr.Logger, opts ...LoggerOption) {
-	logging.loggerOptions = loggerOptions{}
-	for _, opt := range opts {
-		opt(&logging.loggerOptions)
-	}
-	logging.logger = &logWriter{
-		Logger:          logger,
-		writeKlogBuffer: logging.loggerOptions.writeKlogBuffer,
-	}
+	setLoggerOnce.Do(func() {
+		logging.loggerOptions = loggerOptions{}
+		for _, opt := range opts {
+			opt(&logging.loggerOptions)
+		}
+		logging.logger = &logWriter{
+			Logger:          logger,
+			writeKlogBuffer: logging.loggerOptions.writeKlogBuffer,
+		}
+	})
 }
 
 // ContextualLogger determines whether the logger passed to
@@ -145,9 +153,11 @@ func ClearLogger() {
 // and return their input logger respectively context. This may be useful
 // to avoid the additional overhead for contextual logging.
 //
-// This must be called during initialization before goroutines are started.
+// This can only be called once; subsequent calls are ignored.
 func EnableContextualLogging(enabled bool) {
-	logging.contextualLoggingEnabled = enabled
+	enableContextualOnce.Do(func() {
+		logging.contextualLoggingEnabled = enabled
+	})
 }
 
 // FromContext retrieves a logger set by the caller or, if not set,
